@@ -18,7 +18,10 @@ requiredDataConnectors:
       - DeviceEvents 
   - connectorId: WindowsSecurityEvents
     dataTypes: 
-      - SecurityEvents  
+      - SecurityEvents 
+  - connectorId: WindowsForwardedEvents
+    dataTypes: 
+      - WindowsEvent 
 queryFrequency: 1d 
 queryPeriod: 1d
 triggerOperator: gt 
@@ -75,5 +78,14 @@ entityMappings:
     fieldMappings:
       - identifier: FullName
         columnName: HostCustomEntity
-version: 1.1.0
+version: 1.1.2
 kind: Scheduled
+metadata:
+    source:
+        kind: Community
+    author:
+        name: Pete Bryan
+    support:
+        tier: Community
+    categories:
+        domains: [ "Security - Others", "Identity" ]

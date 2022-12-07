@@ -11,6 +11,9 @@ requiredDataConnectors:
   - connectorId: WindowsSecurityEvents
     dataTypes:
       - SecurityEvent
+  - connectorId: WindowsForwardedEvents
+    dataTypes:
+      - WindowsEvent
 queryFrequency: 1d
 queryPeriod: 14d
 triggerOperator: gt
@@ -77,5 +80,14 @@ entityMappings:
     fieldMappings:
       - identifier: Address
         columnName: IPCustomEntity
-version: 1.2.0
+version: 1.2.2
 kind: Scheduled
+metadata:
+    source:
+        kind: Community
+    author:
+        name: Shain
+    support:
+        tier: Community
+    categories:
+        domains: [ "Security - Threat Protection" ]

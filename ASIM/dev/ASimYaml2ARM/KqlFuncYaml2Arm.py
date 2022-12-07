@@ -83,6 +83,8 @@ logger = logging.getLogger(__name__)
 if level == logging.DEBUG:
     sys.tracebacklimit = 1
 
+logging.info (f'Template directory is {templates_dir}.')
+
 # -- Generate file list from file and folder parameters
 folders = args.folders
 
@@ -90,7 +92,7 @@ if len(folders) == 0: # -- use current working directory as default if not files
     folders = [cwd]
 
 files = []
-logging.debug (f'Inspecting files and folders {folders}.')
+logging.info (f'Inspecting files and folders {folders}.')
 for f in folders:
     f = os.path.abspath(f)
     if Path(f).is_file():
@@ -118,9 +120,9 @@ if len(files) == 0:
     raise SystemExit ('No files to prcess.')
 
 # -- Read and prepare templates
-func_arm_template = json.load(open(os.path.join(args.templates_dir, 'func_arm_template.json'), 'r'))
+func_arm_template = json.load(open(os.path.join(templates_dir, 'func_arm_template.json'), 'r'))
 if package_mode:
-    package_arm_template = json.load(open(os.path.join(args.templates_dir, f'{package_type}_arm_template.json'), 'r'))
+    package_arm_template = json.load(open(os.path.join(templates_dir, f'{package_type}_arm_template.json'), 'r'))
     generic_element_template = (package_arm_template['resources']).pop()
     template_uri = generic_element_template['properties']['templateLink']['uri']
 
@@ -138,38 +140,87 @@ for f in files:
         logging.debug ('Parsing XML')
         # parse the YAML file
         parserYaml = yamale.make_data(os.path.join(folder, f))
-        Title = parserYaml[0][0]["Parser"]["Title"]
-        Alias = parserYaml[0][0]["ParserName"]
-        Query = parserYaml[0][0]["ParserQuery"]
-        Product = parserYaml[0][0]["Product"]["Name"]
-        Description = parserYaml[0][0]["Description"]
+        try:
+            Title = parserYaml[0][0]["Parser"]["Title"]
+        except:
+            try:
+                FunctionMode = True
+                Title = parserYaml[0][0]["Function"]["Title"]
+            except:
+                 raise SystemExit (f"Error: file {f} does not specify a parser or function title.")
+
+        try:
+            Alias = parserYaml[0][0]["ParserName"]
+        except:
+            try:
+                Alias = parserYaml[0][0]["FunctionName"]
+            except:
+                 raise SystemExit (f"Error: file {f} does not specify a parser or function name.")
+           
+        try:
+             Query = parserYaml[0][0]["ParserQuery"]
+        except:
+            try:
+                 Query = parserYaml[0][0]["FunctionQuery"]
+            except:
+                 raise SystemExit (f"Error: file {f} does not specify a parser or function query.")
+        
+        try:
+             Product = parserYaml[0][0]["Product"]["Name"]
+        except:
+            Product = ""
+            if not(FunctionMode):
+                raise SystemExit (f"Error: file {f} does not specify a parser product name.")
+       
+        try:
+            Description = parserYaml[0][0]["Description"]
+        except:
+            raise SystemExit (f"Error: file {f} does not specify a description.")
 
         try:
             Schema = parserYaml[0][0]["Normalization"]["Schema"]
         except:
             Schema = ""
             logging.info (f"No schema in YAML file {f}.")
+
+        try:
+            Category = parserYaml[0][0]["Category"]
+        except:
+            Category = "ASIM" # -- should not be hardcoded
     
         if Schema != "":
             if package_type == 'asim' and package_schema != "" and package_schema != Schema:
                 raise SystemExit(f"Error: schema in file {f} is inconsistent with asim package schema.")
             package_schema = Schema
 
-
-
         params = parserYaml[0][0].get("ParserParams")
+        if not(params):
+            params = parserYaml[0][0].get("FunctionParams")            
 
         logging.debug ('Generating ARM template')
         # generate the ARM template
         armTemplate = copy.deepcopy(func_arm_template)
         armTemplate['resources'][0]['resources'][0]['name'] = Alias
         armTemplate['resources'][0]['resources'][0]['properties']['query'] = Query
+        armTemplate['resources'][0]['resources'][0]['properties']['category'] = Category
         if params:
+            Parameters = ""
             for param in params:
-                if param['Type']=='string':
-                    param['Default'] = f"\'{param['Default']}\'"
-            armTemplate['resources'][0]['resources'][0]['properties']['functionParameters'] =  \
-                ', '.join([f'{param["Name"]}:{param["Type"]}={param["Default"]}' for param in params])
+                logging.debug("Param: " + str(param))
+                if param['Type'].startswith('table:'):
+                    ParamString = f'{param["Name"]}:{param["Type"].split(":",1)[1]}'
+                else:
+                    try:
+                        Default = param["Default"] 
+                        if param['Type']=='string':
+                            Default = f"\'{Default}\'"
+                        ParamString = f'{param["Name"]}:{param["Type"]}={Default}'
+                    except:
+                        ParamString = f'{param["Name"]}:{param["Type"]}'
+                if Parameters != "":
+                    Parameters = f'{Parameters},'
+                Parameters = Parameters + ParamString
+            armTemplate['resources'][0]['resources'][0]['properties']['functionParameters'] =  Parameters
         armTemplate['resources'][0]['resources'][0]['properties']['FunctionAlias'] = Alias
         armTemplate['resources'][0]['resources'][0]['properties']['displayName'] = Title
 
@@ -201,7 +252,7 @@ for f in files:
             package_arm_template['resources'].append(genericTemplate_element)
 
     except Exception as E:
-        raise SystemExit(f'Converstion of {f} failed:{E}')
+        raise SystemExit(f'Convertion of {f} failed:{E}')
 
 if package_mode:
     if package_schema == "NA":
@@ -212,7 +263,7 @@ if package_mode:
         jf.write(json_txt.replace('{schema}', package_schema))
 
     logging.debug ('Generating full deployment readme (folder mode only)')
-    with open(os.path.join(scriptdir, f'{package_type}_readme.md'), 'r') as fdr:
+    with open(os.path.join(templates_dir, f'{package_type}_readme.md'), 'r') as fdr:
         package_readme = fdr.read().format (schema=package_schema, uri=encoded_uri, branch=encoded_branch)
         with open(os.path.join(dest, 'README.md'), 'w') as rm:
             rm.write(package_readme)
